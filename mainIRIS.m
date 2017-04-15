@@ -5,29 +5,36 @@ close all;
 inputs = importdata('iris.data');
 % XOR input for x1 and x2
 
-entradas = [-1 0 0; -1 0 1; -1 1 0; -1 1 1];
-saidasDesejadas = [0; 1; 1; 0];
+entradas = inputs(:, 1:4);
 
+entradas = (entradas - min(entradas)) ./ ( max(entradas) - min(entradas) );
+saidasDesejadas = inputs(:, 5:7);
 
+randIndexes = randperm(length(inputs));
+
+X_treino = entradas(randIndexes(1:floor(length(entradas) * 0.8)), :)';
+X_teste = entradas(randIndexes(floor(length(entradas) * 0.8) + 1:length(inputs)),:)';
+Y_treino = saidasDesejadas(randIndexes(1:floor(length(saidasDesejadas) * 0.8)), :)';
+Y_teste = saidasDesejadas(randIndexes(floor(length(saidasDesejadas) * 0.8) + 1:length(inputs)),:)';
+
+X_treino = [repmat(-1, 1, 120); X_treino];
 % Desired output of XOR
 % saidasDesejadas = [0;1;1;0];
 % Initialize the bias
 % Learning coefficient
-taxaDeAprendizado = 0.1;
+alpha = 0.5;
 
 % Number of learning iterations
-maximoDeEpocas = 100000;
+maximoDeEpocas = 10000;
 
 %Numero de amostras de dados
-quantidadeDeAmostras = size(entradas, 1);
+quantidadeDeAmostras = size(X_treino, 2);
 
 %Numero de entradas por amostra de dados
-quantidadeDeEntradas = size(entradas, 2);
+quantidadeDeEntradas = size(X_treino, 1);
 
-quantidadeDeNeuroniosOcultos = 2;
-quantidadeDeNeuroniosDeSaida = 1;
-
-saida = zeros(4,1);
+quantidadeDeNeuroniosOcultos = 4;
+quantidadeDeNeuroniosDeSaida = 3;
 
 MSE = zeros(1,maximoDeEpocas);
 
@@ -35,50 +42,51 @@ convergence = 0;
 
 while(convergence == 0)
     
-    pesos1 = (rand(quantidadeDeNeuroniosOcultos,quantidadeDeEntradas) - 0.5)/10;
-pesos2 = (rand(quantidadeDeNeuroniosDeSaida,quantidadeDeNeuroniosOcultos+1) - 0.5)/10;
-% pesos2 = zeros(quantidadeDeNeuroniosDeSaida, quantidadeDeNeuroniosOcultos+1);
-saida = zeros(4,1);
+    Woculto = rand(quantidadeDeEntradas, quantidadeDeNeuroniosOcultos);
+    Wsaida = rand(quantidadeDeNeuroniosOcultos+1, quantidadeDeNeuroniosDeSaida);
+    % pesos2 = zeros(quantidadeDeNeuroniosDeSaida, quantidadeDeNeuroniosOcultos+1);
     
     for i = 1:maximoDeEpocas
-        disp(saida)
-        
-        saida = zeros(4,1);
-        
-        
+      
         for j = 1:quantidadeDeAmostras
             
-            uCamadaOculta = entradas(j,:) * pesos1.';
-            yCamadaOculta = sigma(uCamadaOculta);
+            uCamadaOculta = Woculto' * X_treino(:,j);
+            yCamadaOculta = logistica(uCamadaOculta);
             
-            entradasDaCamadaDeSaida = [-1 yCamadaOculta];
+            entradasDaCamadaDeSaida = [-1; yCamadaOculta];
             
-            uDaCamadaDeSaida = entradasDaCamadaDeSaida * pesos2.';
-            yCamadaSaida = sigma(uDaCamadaDeSaida);
-            saida(j) = sigma(uDaCamadaDeSaida);
-            
+            uDaCamadaDeSaida =  Wsaida' * entradasDaCamadaDeSaida;
+            yCamadaSaida = logistica(uDaCamadaDeSaida);
+            yCamadaSaidaDegrau = getOutput(yCamadaSaida);          
             % Testar com o degrau na saida
-            erroNaSaida = saidasDesejadas(j) - yCamadaSaida;
+            erroNaSaida = saidasDesejadas(j, :)' - yCamadaSaidaDegrau;
+%             logisticaRes = alpha * erroNaSaida * (yCamadaSaida - yCamadaSaida.^2)';
+            logisticaRes = alpha * erroNaSaida;
+            deltaCamadaSaida =  repmat(entradasDaCamadaDeSaida, 1, 3) * logisticaRes;
+            Wsaida = Wsaida + deltaCamadaSaida;
             
-            deltaCamadaSaida = (sigma(yCamadaSaida) - sigma(yCamadaSaida).^2) * taxaDeAprendizado * erroNaSaida * entradasDaCamadaDeSaida;
-            pesos2 = pesos2 + deltaCamadaSaida;
-            
-            derivada = (yCamadaOculta - yCamadaOculta.^2);
-            deltaCamadaOculta = taxaDeAprendizado * erroNaSaida * repmat(pesos2(2:3),2,1) * derivada.' * entradas(j,:);
-            pesos1 = pesos1 + deltaCamadaOculta;
-            
-            if sinalDe(saida(1)) == saidasDesejadas(1) && sinalDe(saida(2)) == saidasDesejadas(2) && sinalDe(saida(3)) == saidasDesejadas(3) && sinalDe(saida(4)) == saidasDesejadas(4)
-                disp('Numero de epocas: ')
-                disp(i)
-                disp('Resultado Final:')
-                disp([sinalDe(saida(1)); sinalDe(saida(2));sinalDe(saida(3));sinalDe(saida(4))])
-                return
-            end
+            derivada =  alpha * erroNaSaida * (yCamadaSaida - yCamadaSaida.^2)';
+            derivada2 = (Woculto * derivada);
+            entradasDelta = repmat(yCamadaOculta, 1,4);
+            deltaCamadaOculta =  entradasDelta * derivada2;
+            Woculto = Woculto + deltaCamadaOculta;
             
         end
     end
     
-        YFinal  = pesos2*tanh(entradas*pesos1)'; % Sa�da da Rede;
+   finalValues = Woculto' * X_treino;
+   finalValues2 = Wsaida' * [repmat(-1,1,120); finalValues];
+   finalDegrau = [];
+   
+   for i = 1:length(finalValues2)
+       valor = finalValues2(:, i)
+       degrau = getOutput(valor)
+       finalDegrau = [finalDegrau degrau];
+       
+   end
+   
+   
+        YFinal  = Wsaida*logistica(entradas*Woculto)'; % Sa�da da Rede;
         for i = 1:quantidadeDeAmostras
             if(YFinal(i) > 0.5)
                 YFinal(i) = 1;
@@ -144,19 +152,19 @@ end
 
 
 
-function [ y ] = sigma( x )
+function [ y ] = logistica( x )
 
-for i = 1:size(x, 2)
-    y(i)=1/(1+exp(-x(i)));
+for i = 1:size(x, 1)
+    y(i, 1)=1/(1+exp(-x(i)));
 end
 
 end
 
 function y = getOutput(x)
 
-max = 0;
+max = x(1);
 maxIndex = 1;
-for i = 1:size(x, 2)
+for i = 1:size(x, 1)
     if x(i) > max
         max = x(i);
         maxIndex = i;
@@ -169,7 +177,7 @@ y(maxIndex) = 1;
 end
 
 function y = sinalDe(x)
-if x > 0.5
+if x >= 0
     y = 1;
 else
     y = 0;
